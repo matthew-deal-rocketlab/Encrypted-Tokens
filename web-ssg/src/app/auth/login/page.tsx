@@ -11,7 +11,8 @@ import React from 'react'
 import Link from 'next/link'
 import Alert from '@/components/alert'
 import Input from '@/components/input'
-import { KEY_JWT_TOKEN, KEY_REFRESH_TOKEN } from '@/constants'
+import { KEY_JWT_TOKEN, KEY_REFRESH_TOKEN, passphrase, salt } from '@/constants'
+import { encryptToken, deriveKey } from '@/utils/crypto-utils'
 
 interface FormFields {
   email: string
@@ -64,14 +65,31 @@ export default function LoginForm() {
     type: 'success',
   })
 
-  const setTokens = (jwtToken: string, refreshToken: string) => {
-    localStorage.setItem(KEY_JWT_TOKEN, jwtToken)
-    localStorage.setItem(KEY_REFRESH_TOKEN, refreshToken)
-  }
+  const setTokens = async (jwtToken: string, refreshToken: string) => {
+    const key = await deriveKey(passphrase, salt)
 
+    const { encrypted: encryptedJwt, iv: ivJwt } = await encryptToken(key, jwtToken)
+    const { encrypted: encryptedRefresh, iv: ivRefresh } = await encryptToken(key, refreshToken)
+    localStorage.setItem(
+      KEY_JWT_TOKEN,
+      JSON.stringify({
+        encryptedJwt: Array.from(new Uint8Array(encryptedJwt)),
+        ivJwt: Array.from(new Uint8Array(ivJwt)),
+      }),
+    )
+    localStorage.setItem(
+      KEY_REFRESH_TOKEN,
+      JSON.stringify({
+        encryptedRefresh: Array.from(new Uint8Array(encryptedRefresh)),
+        ivRefresh: Array.from(new Uint8Array(ivRefresh)),
+      }),
+    )
+  }
   const submitLoginFormData = async (data: FormFields): Promise<SubmitResult> => {
     const payload = { authLogin: { ...data } }
+
     const loginResult = await apiPost('/jsonql', payload)
+
     if (loginResult.status !== ApiStatus.OK) {
       return { text: 'Error logging in', type: SubmitResultType.error }
     }
@@ -89,7 +107,7 @@ export default function LoginForm() {
     }
 
     // Use setTokens from context to update auth state
-    setTokens(authLogin.token, authLogin.refreshToken)
+    await setTokens(authLogin.token, authLogin.refreshToken)
 
     return {
       text: 'Welcome! You will be redirected to the dashboard shortly',

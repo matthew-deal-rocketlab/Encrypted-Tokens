@@ -1,8 +1,9 @@
 'use client'
 
-import { API_BASE_URL, API_STATIC_KEY, KEY_JWT_TOKEN } from '@/constants'
+import { API_BASE_URL, API_STATIC_KEY, KEY_JWT_TOKEN, passphrase, salt } from '@/constants'
 import { jsonPost, type ApiResponse } from '@/services/apiclient'
 import { refreshTokenHelper } from './refreshToken'
+import { decryptToken, deriveKey } from './crypto-utils'
 
 /*
  * This is a wrapper around the jsonPost function from the apiclient.
@@ -11,9 +12,20 @@ import { refreshTokenHelper } from './refreshToken'
  * - It checks if the JWT token is still valid, and if not, it refreshes the token
  * - It retries the request if the JWT token was refreshed
  */
-
 export const apiPost = async (url: string, data: object): Promise<ApiResponse> => {
-  const jwtToken = localStorage.getItem(KEY_JWT_TOKEN)
+  const tokenData = localStorage.getItem(KEY_JWT_TOKEN)
+  let jwtToken = ''
+
+  if (tokenData) {
+    const { encryptedJwt, ivJwt } = JSON.parse(tokenData)
+    const key = await deriveKey(passphrase, salt)
+    try {
+      jwtToken = await decryptToken(key, encryptedJwt, new Uint8Array(ivJwt))
+    } catch (error) {
+      console.error('Decryption error:', error)
+    }
+  }
+
   const headers = {
     Accept: 'application/json',
     'Content-type': 'application/json',
@@ -26,15 +38,14 @@ export const apiPost = async (url: string, data: object): Promise<ApiResponse> =
     body: JSON.stringify(data),
   })
 
-  // This is an additional status check, even know we are checking this in the AuthProvider.
-  // This checks when we call an API endpoint directly, without using the AuthProvider.
   if (apiResponse.status === 419) {
     const refreshed = await refreshTokenHelper()
     if (refreshed) {
       return await apiPost(url, data)
     }
+    // If the token could not be refreshed, we should log the user out.
+    if (!refreshed) localStorage.removeItem(KEY_JWT_TOKEN)
   }
 
-  // Handle other responses
-  return apiResponse
+  return apiResponse // Return the response from API or after refreshing token
 }

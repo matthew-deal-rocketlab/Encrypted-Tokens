@@ -29,6 +29,7 @@ export const API_HEADER = 'x-api-key'
 
 // Lifetime of the JWT token
 export const JWT_EXPIRY = 15 * 60 // minutes in seconds
+
 // Lifetime of the refresh token
 export const JWT_REFRESH_EXPIRY = 30 * 24 * 60 * 60 // days in seconds
 // The refresh token will be changed after this interval

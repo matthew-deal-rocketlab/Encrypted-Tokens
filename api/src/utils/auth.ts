@@ -151,3 +151,7 @@ export const validateAPIKey = (req: Request): boolean => {
   if (!isValid) req.socket.end()
   return isValid
 }
+
+export function salt(): string {
+  return crypto.randomBytes(16).toString('base64')
+}
